@@ -511,13 +511,20 @@ input[type="date"]::-webkit-calendar-picker-indicator {
 </div>
 
 <script>
+<script>
 // ═══════════════════════════════════════════
-// CONFIG — YOUR API KEYS
+// CONFIG
 // ═══════════════════════════════════════════
 const FOOTBALL_API_KEY = 'cdfd34f5af20cc52b125e7adfd8fd4a1';
 const ODDS_API_KEY     = 'a0ed9eedb4179663932a06c661af9358';
-const GROQ_API_KEY     = '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';
-const GROQ_MODEL       = 'meta-llama/llama-4-maverick-17b-128e-instruct';
+const GROQ_API_KEY     = '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';
+
+// ✅ CORRECT CURRENT GROQ MODELS (May 2026)
+const GROQ_MODELS = [
+  'meta-llama/llama-4-scout-17b-16e-instruct',
+  'llama-3.3-70b-versatile',
+  'llama-3.1-8b-instant'
+];
 
 // ═══════════════════════════════════════════
 // STATE
@@ -535,333 +542,334 @@ function tomorrowStr() {
   return d.toISOString().split('T')[0];
 }
 function niceDate(str) {
-  return new Date(str+'T12:00:00').toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
+  return new Date(str+'T12:00:00').toLocaleDateString('en-GB',{
+    weekday:'long',day:'numeric',month:'long',year:'numeric'
+  });
 }
-
 function setDate(type, btn) {
   document.querySelectorAll('.date-chip').forEach(b=>b.classList.remove('active'));
   btn.classList.add('active');
   const inp = document.getElementById('custom-date');
-  if(type==='today')    { selectedDate=todayStr();    inp.style.display='none'; }
+  if(type==='today')         { selectedDate=todayStr();    inp.style.display='none'; }
   else if(type==='tomorrow') { selectedDate=tomorrowStr(); inp.style.display='none'; }
-  else { inp.style.display='block'; inp.value=todayStr(); }
+  else                       { inp.style.display='block';  inp.value=todayStr(); }
 }
-function onCustomDate(v){ if(v) selectedDate=v; }
+function onCustomDate(v) { if(v) selectedDate=v; }
 
 // League chips toggle
 document.getElementById('league-row').addEventListener('click', e=>{
   const chip = e.target.closest('.league-chip');
   if(chip) chip.classList.toggle('on');
 });
-
 function getActiveLeagues() {
   return [...document.querySelectorAll('.league-chip.on')].map(c=>c.dataset.l);
 }
 
 // Clock
 function tickClock(){
-  const n=new Date();
+  const n = new Date();
   document.getElementById('clock').textContent =
     n.toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short'}).toUpperCase()
     +' · '+n.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'});
 }
-tickClock(); setInterval(tickClock,30000);
+tickClock(); setInterval(tickClock, 30000);
 
 // ═══════════════════════════════════════════
 // LOADING STEPS
 // ═══════════════════════════════════════════
 let stepTimer = null;
-function startSteps(){
-  const ids=['s1','s2','s3','s4','s5','s6','s7'];
-  ids.forEach(id=>{ const el=document.getElementById(id); el.classList.remove('active','done'); el.querySelector('.step-icon').textContent='→'; });
-  let i=0;
-  function next(){
-    if(i>0){ const prev=document.getElementById(ids[i-1]); prev.classList.remove('active'); prev.classList.add('done'); prev.querySelector('.step-icon').textContent=''; }
-    if(i<ids.length){ document.getElementById(ids[i]).classList.add('active'); i++; stepTimer=setTimeout(next,2400); }
+function startSteps() {
+  const ids = ['s1','s2','s3','s4','s5','s6','s7'];
+  ids.forEach(id => {
+    const el = document.getElementById(id);
+    el.classList.remove('active','done');
+    el.querySelector('.step-icon').textContent = '→';
+  });
+  let i = 0;
+  function next() {
+    if(i>0){
+      const prev = document.getElementById(ids[i-1]);
+      prev.classList.remove('active'); prev.classList.add('done');
+    }
+    if(i<ids.length){
+      document.getElementById(ids[i]).classList.add('active');
+      i++; stepTimer = setTimeout(next, 2800);
+    }
   }
   next();
 }
-function stopSteps(){
+function stopSteps() {
   if(stepTimer) clearTimeout(stepTimer);
-  ['s1','s2','s3','s4','s5','s6','s7'].forEach(id=>{
-    const el=document.getElementById(id); el.classList.remove('active'); el.classList.add('done');
+  ['s1','s2','s3','s4','s5','s6','s7'].forEach(id => {
+    const el = document.getElementById(id);
+    el.classList.remove('active'); el.classList.add('done');
   });
 }
 
 // ═══════════════════════════════════════════
-// API-FOOTBALL CALLS
+// TOP LEAGUE IDS
 // ═══════════════════════════════════════════
-async function fetchFixtures(date) {
-  try {
-    const res = await fetch(`https://v3.football.api-sports.io/fixtures?date=${date}`, {
-      headers: { 'x-apisports-key': FOOTBALL_API_KEY }
-    });
-    const data = await res.json();
-    return data.response || [];
-  } catch(e) { console.warn('Fixtures fetch failed:', e); return []; }
-}
+const TOP_LEAGUE_IDS = [39,140,78,135,61,2,3,40,88,94,103,207,71,253];
 
-async function fetchInjuries(fixtureId) {
-  try {
-    const res = await fetch(`https://v3.football.api-sports.io/injuries?fixture=${fixtureId}`, {
-      headers: { 'x-apisports-key': FOOTBALL_API_KEY }
-    });
-    const data = await res.json();
-    return data.response || [];
-  } catch(e) { return []; }
-}
-
-async function fetchH2H(h2h) {
-  try {
-    const res = await fetch(`https://v3.football.api-sports.io/fixtures/headtohead?h2h=${h2h}&last=6`, {
-      headers: { 'x-apisports-key': FOOTBALL_API_KEY }
-    });
-    const data = await res.json();
-    return data.response || [];
-  } catch(e) { return []; }
-}
-
-async function fetchTeamForm(teamId, leagueId, season) {
-  try {
-    const res = await fetch(`https://v3.football.api-sports.io/fixtures?team=${teamId}&league=${leagueId}&season=${season}&last=6`, {
-      headers: { 'x-apisports-key': FOOTBALL_API_KEY }
-    });
-    const data = await res.json();
-    return data.response || [];
-  } catch(e) { return []; }
-}
-
-async function fetchStandings(leagueId, season) {
-  try {
-    const res = await fetch(`https://v3.football.api-sports.io/standings?league=${leagueId}&season=${season}`, {
-      headers: { 'x-apisports-key': FOOTBALL_API_KEY }
-    });
-    const data = await res.json();
-    return data.response?.[0]?.league?.standings?.[0] || [];
-  } catch(e) { return []; }
+// ═══════════════════════════════════════════
+// FOOTBALL API — single helper, minimal calls
+// ═══════════════════════════════════════════
+async function footballGet(endpoint) {
+  const res = await fetch(`https://v3.football.api-sports.io/${endpoint}`, {
+    headers: { 'x-apisports-key': FOOTBALL_API_KEY }
+  });
+  const json = await res.json();
+  if (!res.ok || (json.errors && Object.keys(json.errors).length > 0)) {
+    throw new Error(`Football API: ${JSON.stringify(json.errors || res.status)}`);
+  }
+  return json.response || [];
 }
 
 // ═══════════════════════════════════════════
-// ODDS API CALL
+// ODDS API — one call only to preserve quota
 // ═══════════════════════════════════════════
 async function fetchOdds() {
   try {
-    const sports = ['soccer_epl','soccer_spain_la_liga','soccer_germany_bundesliga',
-                    'soccer_italy_serie_a','soccer_france_ligue_one','soccer_uefa_champs_league'];
-    const allOdds = [];
-    for(const sport of sports.slice(0,3)) { // limit calls
-      const res = await fetch(
-        `https://api.the-odds-api.com/v4/sports/${sport}/odds/?apiKey=${ODDS_API_KEY}&regions=eu&markets=h2h,totals,btts&oddsFormat=decimal`
-      );
-      if(res.ok){ const d=await res.json(); allOdds.push(...d); }
-    }
-    return allOdds;
-  } catch(e) { console.warn('Odds fetch failed:', e); return []; }
+    const res = await fetch(
+      `https://api.the-odds-api.com/v4/sports/soccer_epl/odds/?apiKey=${ODDS_API_KEY}&regions=eu&markets=h2h,totals&oddsFormat=decimal`
+    );
+    if(!res.ok) return [];
+    return await res.json();
+  } catch(e) { return []; }
 }
 
-// ═══════════════════════════════════════════
-// DATA BUILDERS
-// ═══════════════════════════════════════════
-function formFromFixtures(fixtures, teamId) {
-  return fixtures.slice(-6).map(f => {
-    const isHome = f.teams.home.id === teamId;
-    const hg = f.goals.home ?? 0;
-    const ag = f.goals.away ?? 0;
-    if(isHome) return hg > ag ? 'W' : hg < ag ? 'L' : 'D';
-    else        return ag > hg ? 'W' : ag < hg ? 'L' : 'D';
-  }).join('');
-}
-
-function standingInfo(standings, teamId) {
-  const s = standings.find(t => t.team.id === teamId);
-  if(!s) return null;
-  return { rank: s.rank, points: s.points, played: s.all.played,
-           gf: s.all.goals.for, ga: s.all.goals.against,
-           form: s.form };
-}
-
-function summariseFixtures(fixtures, label) {
-  if(!fixtures.length) return `${label}: No recent data`;
-  return fixtures.slice(-6).map(f => {
-    const d = f.fixture.date.split('T')[0];
-    const h = f.teams.home.name; const a = f.teams.away.name;
-    const hg = f.goals.home ?? '?'; const ag = f.goals.away ?? '?';
-    return `${d}: ${h} ${hg}-${ag} ${a}`;
-  }).join(' | ');
-}
-
-function summariseH2H(h2h, homeTeam, awayTeam) {
-  if(!h2h.length) return 'No H2H data available';
-  return h2h.slice(-5).map(f => {
-    const d = f.fixture.date.split('T')[0];
-    const hg = f.goals.home ?? '?'; const ag = f.goals.away ?? '?';
-    const winner = f.teams.home.winner ? f.teams.home.name : f.teams.away.winner ? f.teams.away.name : 'Draw';
-    return `${d}: ${f.teams.home.name} ${hg}-${ag} ${f.teams.away.name} (${winner})`;
-  }).join(' | ');
-}
-
-function oddsForMatch(allOdds, homeTeam, awayTeam) {
-  const match = allOdds.find(o =>
-    o.home_team?.toLowerCase().includes(homeTeam.toLowerCase().split(' ')[0]) ||
-    o.away_team?.toLowerCase().includes(awayTeam.toLowerCase().split(' ')[0])
+function oddsForMatch(allOdds, home, away) {
+  const m = allOdds.find(o =>
+    o.home_team?.toLowerCase().includes(home.toLowerCase().split(' ')[0]) ||
+    o.away_team?.toLowerCase().includes(away.toLowerCase().split(' ')[0])
   );
-  if(!match) return 'Live odds: Not available';
-  const h2h = match.bookmakers?.[0]?.markets?.find(m=>m.key==='h2h');
-  const tot  = match.bookmakers?.[0]?.markets?.find(m=>m.key==='totals');
-  let str = '';
-  if(h2h) {
-    const hO = h2h.outcomes?.find(o=>o.name===match.home_team)?.price;
+  if(!m) return 'Not available';
+  const bk = m.bookmakers?.[0];
+  if(!bk) return 'Not available';
+  const h2h = bk.markets?.find(mk=>mk.key==='h2h');
+  const tot = bk.markets?.find(mk=>mk.key==='totals');
+  let s = '';
+  if(h2h){
+    const hO = h2h.outcomes?.find(o=>o.name===m.home_team)?.price;
     const dO = h2h.outcomes?.find(o=>o.name==='Draw')?.price;
-    const aO = h2h.outcomes?.find(o=>o.name===match.away_team)?.price;
-    str += `1X2: ${hO??'?'} / ${dO??'?'} / ${aO??'?'}`;
+    const aO = h2h.outcomes?.find(o=>o.name===m.away_team)?.price;
+    s += `1X2: ${hO||'?'} / ${dO||'?'} / ${aO||'?'}`;
   }
-  if(tot) {
-    const ov = tot.outcomes?.find(o=>o.name==='Over' && o.point===2.5)?.price;
-    const un = tot.outcomes?.find(o=>o.name==='Under' && o.point===2.5)?.price;
-    if(ov) str += ` | O2.5: ${ov} | U2.5: ${un??'?'}`;
+  if(tot){
+    const ov = tot.outcomes?.find(o=>o.name==='Over'&&o.point===2.5)?.price;
+    if(ov) s += ` | O2.5: ${ov}`;
   }
-  return str || 'Live odds: Loaded';
+  return s || 'Loaded';
 }
 
 // ═══════════════════════════════════════════
-// TOP LEAGUES FILTER
+// FORM HELPER
 // ═══════════════════════════════════════════
-const TOP_LEAGUE_IDS = [
-  39,   // Premier League
-  140,  // La Liga
-  78,   // Bundesliga
-  135,  // Serie A
-  61,   // Ligue 1
-  2,    // Champions League
-  3,    // Europa League
-  40,   // Championship
-  88,   // Eredivisie
-  94,   // Primeira Liga
-  103,  // Eliteserien
-  207,  // Swiss Super League
-  71,   // Brasileirao
-  253,  // MLS
-];
+function buildForm(fixtures, teamId) {
+  return fixtures.slice(-5).map(f => {
+    const isHome = f.teams.home.id === teamId;
+    const hg = f.goals?.home ?? 0;
+    const ag = f.goals?.away ?? 0;
+    if(isHome) return hg>ag?'W':hg<ag?'L':'D';
+    return ag>hg?'W':ag<hg?'L':'D';
+  }).join('') || 'N/A';
+}
+
+function buildRecentResults(fixtures, teamName) {
+  if(!fixtures.length) return 'No data';
+  return fixtures.slice(-4).map(f => {
+    const d = f.fixture.date?.split('T')[0]||'?';
+    return `${d}: ${f.teams.home.name} ${f.goals?.home??'?'}-${f.goals?.away??'?'} ${f.teams.away.name}`;
+  }).join(' | ');
+}
+
+function buildH2H(h2hFixtures) {
+  if(!h2hFixtures.length) return 'No H2H data';
+  return h2hFixtures.slice(-4).map(f => {
+    const w = f.teams.home.winner ? f.teams.home.name : f.teams.away.winner ? f.teams.away.name : 'Draw';
+    return `${f.fixture.date?.split('T')[0]||'?'}: ${f.teams.home.name} ${f.goals?.home??'?'}-${f.goals?.away??'?'} ${f.teams.away.name} → ${w}`;
+  }).join(' | ');
+}
+
+function getStandingInfo(standings, teamId) {
+  const s = standings?.find?.(t => t.team.id === teamId);
+  if(!s) return null;
+  return {
+    rank: s.rank, points: s.points, played: s.all?.played,
+    gf: s.all?.goals?.for, ga: s.all?.goals?.against, form: s.form
+  };
+}
 
 // ═══════════════════════════════════════════
-// MAIN ANALYSIS RUNNER
+// MAIN RUNNER
 // ═══════════════════════════════════════════
 async function runAnalysis() {
-  const btn = document.getElementById('run-btn');
-  const loading = document.getElementById('loading');
-  const results = document.getElementById('results');
+  const btn      = document.getElementById('run-btn');
+  const loading  = document.getElementById('loading');
+  const results  = document.getElementById('results');
   const errorBox = document.getElementById('error-box');
-  const output = document.getElementById('output-area');
-  const strip = document.getElementById('data-strip');
+  const output   = document.getElementById('output-area');
+  const strip    = document.getElementById('data-strip');
 
-  // Reset
-  btn.disabled = true; btn.textContent = '⏳  FETCHING LIVE DATA...';
-  loading.classList.add('show'); results.classList.remove('show');
-  errorBox.classList.remove('show'); output.innerHTML = ''; strip.innerHTML = '';
+  // Reset UI
+  btn.disabled = true;
+  btn.textContent = '⏳  FETCHING LIVE DATA...';
+  loading.classList.add('show');
+  results.classList.remove('show');
+  errorBox.classList.remove('show');
+  output.innerHTML = '';
+  strip.innerHTML = '';
   startSteps();
 
   const activeLeagues = getActiveLeagues();
-  const season = selectedDate.split('-')[0];
+  const season = selectedDate.startsWith('2025') ? '2024' : selectedDate.split('-')[0];
 
   try {
-    // ── STEP 1: Fixtures ──────────────────────
-    const allFixtures = await fetchFixtures(selectedDate);
-    const fixtures = allFixtures.filter(f =>
-      TOP_LEAGUE_IDS.includes(f.league.id) &&
-      ['NS','TBD','1H','HT','2H','ET','P','BT','SUSP','INT','PST','CANC','ABD','AWD','WO'].includes(f.fixture.status.short)
-    );
 
-    // ── STEP 2: Injuries for top matches ──────
-    const topFixtures = fixtures.slice(0, 20);
-    const injuryMap = {};
-    for(const f of topFixtures.slice(0,8)) {
-      const inj = await fetchInjuries(f.fixture.id);
-      if(inj.length) {
-        injuryMap[f.fixture.id] = inj.map(i =>
-          `${i.player.name} (${i.team.name}) — ${i.player.reason}`
-        ).slice(0,6).join(', ');
-      }
+    // ── STEP 1: Get today's fixtures ──────────
+    let allFixtures = [];
+    try {
+      allFixtures = await footballGet(`fixtures?date=${selectedDate}`);
+    } catch(e) {
+      console.warn('Fixtures failed:', e.message);
+      // Continue — AI will work with what it knows
     }
 
-    // ── STEP 3: Form & H2H for selected matches ──
+    // Filter to top leagues only
+    const topFixtures = allFixtures
+      .filter(f => TOP_LEAGUE_IDS.includes(f.league?.id))
+      .slice(0, 15); // MAX 15 to save API quota
+
+    // ── STEP 2 & 3: Get standings + form ──────
+    // Strategy: only fetch standings (1 call per unique league)
+    // and form for first 6 matches only (saves quota)
+    const standingsCache = {};
+    const uniqueLeagues = [...new Set(topFixtures.map(f => `${f.league.id}_${season}`))];
+
+    for(const key of uniqueLeagues.slice(0, 5)) { // max 5 league standing calls
+      const [lid] = key.split('_');
+      try {
+        const res = await footballGet(`standings?league=${lid}&season=${season}`);
+        standingsCache[lid] = res?.[0]?.league?.standings?.[0] || [];
+      } catch(e) { standingsCache[lid] = []; }
+    }
+
+    // ── STEP 3: Form for top 5 matches only ───
+    // (4 calls × 5 matches = 20 calls max)
     const matchData = [];
-    for(const f of topFixtures.slice(0,12)) {
-      const hId = f.teams.home.id; const aId = f.teams.away.id;
-      const leagueId = f.league.id;
-      const [hForm, aForm, h2h, standings] = await Promise.all([
-        fetchTeamForm(hId, leagueId, season),
-        fetchTeamForm(aId, leagueId, season),
-        fetchH2H(`${hId}-${aId}`),
-        fetchStandings(leagueId, season)
-      ]);
+    for(const f of topFixtures.slice(0, 5)) {
+      const hId = f.teams.home.id;
+      const aId = f.teams.away.id;
+      const lid  = f.league.id;
+
+      let hForm=[], aForm=[], h2h=[];
+      try { hForm = await footballGet(`fixtures?team=${hId}&season=${season}&last=5`); } catch(e){}
+      try { aForm = await footballGet(`fixtures?team=${aId}&season=${season}&last=5`); } catch(e){}
+      try { h2h   = await footballGet(`fixtures/headtohead?h2h=${hId}-${aId}&last=5`); } catch(e){}
+
+      const standings = standingsCache[lid] || [];
+
       matchData.push({
         fixture: f,
-        homeForm: formFromFixtures(hForm, hId),
-        awayForm: formFromFixtures(aForm, aId),
-        homeRecent: summariseFixtures(hForm, f.teams.home.name),
-        awayRecent: summariseFixtures(aForm, f.teams.away.name),
-        h2hSummary: summariseH2H(h2h, f.teams.home.name, f.teams.away.name),
-        homeStanding: standingInfo(standings, hId),
-        awayStanding: standingInfo(standings, aId),
-        injuries: injuryMap[f.fixture.id] || 'None confirmed'
+        homeForm:    buildForm(hForm, hId),
+        awayForm:    buildForm(aForm, aId),
+        homeRecent:  buildRecentResults(hForm, f.teams.home.name),
+        awayRecent:  buildRecentResults(aForm, f.teams.away.name),
+        h2hSummary:  buildH2H(h2h),
+        homeStanding: getStandingInfo(standings, hId),
+        awayStanding: getStandingInfo(standings, aId),
       });
     }
 
-    // ── STEP 4: Odds ──────────────────────────
-    const allOdds = await fetchOdds();
-
-    // ── STEP 5 & 6: Build AI prompt ───────────
-    const prompt = buildElitePrompt(selectedDate, matchData, allOdds, activeLeagues, allFixtures.length);
-
-    // ── STEP 7: Call Groq ─────────────────────
-    const groqRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${GROQ_API_KEY}`
-      },
-      body: JSON.stringify({
-        model: GROQ_MODEL,
-        messages: [{ role: 'user', content: prompt }],
-        max_tokens: 8000,
-        temperature: 0.25,
-        stream: false
-      })
-    });
-
-    if(!groqRes.ok) {
-      const err = await groqRes.json();
-      throw new Error(err.error?.message || `Groq API Error ${groqRes.status}`);
+    // Add remaining fixtures (no extra API calls — AI uses its knowledge)
+    for(const f of topFixtures.slice(5)) {
+      matchData.push({
+        fixture: f,
+        homeForm: 'See AI analysis',
+        awayForm: 'See AI analysis',
+        homeRecent: 'No data fetched (API quota optimisation)',
+        awayRecent: 'No data fetched (API quota optimisation)',
+        h2hSummary: 'Use AI knowledge',
+        homeStanding: getStandingInfo(standingsCache[f.league.id] || [], f.teams.home.id),
+        awayStanding: getStandingInfo(standingsCache[f.league.id] || [], f.teams.away.id),
+      });
     }
 
-    const groqData = await groqRes.json();
-    const text = groqData.choices?.[0]?.message?.content || 'No response generated.';
+    // ── STEP 4: Odds (1 call) ─────────────────
+    const allOdds = await fetchOdds();
+
+    // ── STEP 5: Build prompt ──────────────────
+    const prompt = buildPrompt(selectedDate, matchData, allOdds, activeLeagues, allFixtures.length);
+
+    // ── STEP 6 & 7: Groq with 3-model fallback
+    let text = null;
+    let usedModel = null;
+    let lastError = null;
+
+    for(const model of GROQ_MODELS) {
+      try {
+        console.log(`⚡ Trying: ${model}`);
+        const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${GROQ_API_KEY}`
+          },
+          body: JSON.stringify({
+            model,
+            messages: [{ role: 'user', content: prompt }],
+            max_tokens: model.includes('8b') ? 4000 : 7000,
+            temperature: 0.25
+          })
+        });
+
+        const json = await res.json();
+
+        if(!res.ok) {
+          lastError = json.error?.message || `HTTP ${res.status}`;
+          console.warn(`Model ${model} failed: ${lastError}`);
+          continue;
+        }
+
+        const content = json.choices?.[0]?.message?.content;
+        if(content) { text = content; usedModel = model; break; }
+
+      } catch(e) {
+        lastError = e.message;
+        console.warn(`Model ${model} threw:`, e.message);
+        continue;
+      }
+    }
+
+    if(!text) throw new Error(`All models failed. Last: ${lastError}`);
+    console.log(`✅ Used model: ${usedModel}`);
 
     // ── RENDER ────────────────────────────────
     stopSteps();
     loading.classList.remove('show');
 
-    // Data strip
+    const injuryCount = matchData.filter(m => m.injuries && m.injuries !== 'None confirmed').length;
+
     strip.innerHTML = `
       <div class="data-tile">
-        <div class="data-tile-label">Fixtures Today</div>
-        <div class="data-tile-val">${allFixtures.length}</div>
-        <div class="data-tile-sub">Across all leagues</div>
+        <div class="data-tile-label">Fixtures Found</div>
+        <div class="data-tile-val">${allFixtures.length || 'AI'}</div>
+        <div class="data-tile-sub">Today's games</div>
       </div>
       <div class="data-tile">
-        <div class="data-tile-label">Analysed</div>
-        <div class="data-tile-val">${topFixtures.length}</div>
-        <div class="data-tile-sub">Top league games</div>
+        <div class="data-tile-label">Deep Analysed</div>
+        <div class="data-tile-val">${matchData.length}</div>
+        <div class="data-tile-sub">With live data</div>
       </div>
       <div class="data-tile">
-        <div class="data-tile-label">Injuries Tracked</div>
-        <div class="data-tile-val">${Object.values(injuryMap).join(', ').split(',').filter(Boolean).length}</div>
-        <div class="data-tile-sub">Confirmed absences</div>
-      </div>
-      <div class="data-tile">
-        <div class="data-tile-label">Odds Markets</div>
+        <div class="data-tile-label">Live Odds</div>
         <div class="data-tile-val">${allOdds.length}</div>
-        <div class="data-tile-sub">Live bookmaker lines</div>
+        <div class="data-tile-sub">EPL markets loaded</div>
+      </div>
+      <div class="data-tile">
+        <div class="data-tile-label">AI Engine</div>
+        <div class="data-tile-val" style="font-size:0.7rem;padding-top:6px;">${usedModel.split('/').pop().replace('-instruct','').toUpperCase()}</div>
+        <div class="data-tile-sub">Active model</div>
       </div>
     `;
 
@@ -869,178 +877,163 @@ async function runAnalysis() {
     output.innerHTML = formatOutput(text);
     results.classList.add('show');
 
-    btn.disabled = false; btn.textContent = '⚡  RUN LIVE ANALYSIS';
+    btn.disabled = false;
+    btn.textContent = '⚡  RUN LIVE ANALYSIS';
 
   } catch(err) {
     stopSteps();
     loading.classList.remove('show');
     errorBox.classList.add('show');
-    errorBox.innerHTML = `<strong>⚠ ANALYSIS ERROR</strong><br><br>${err.message}<br><br><span style="color:var(--text3)">Check API keys or internet connection and try again.</span>`;
-    btn.disabled = false; btn.textContent = '⚡  RUN LIVE ANALYSIS';
+    errorBox.innerHTML = `
+      <strong>⚠ ANALYSIS ERROR</strong><br><br>
+      ${err.message}<br><br>
+      <span style="color:var(--text3)">
+        Tips: Check your internet connection. API-Football free plan = 100 calls/day.
+        If you've run analysis multiple times today the quota may be used up.
+        Try again tomorrow or the Groq key may need refreshing.
+      </span>
+    `;
+    btn.disabled = false;
+    btn.textContent = '⚡  RUN LIVE ANALYSIS';
   }
 }
 
 // ═══════════════════════════════════════════
-// ELITE PROMPT BUILDER — WITH LIVE DATA
+// PROMPT BUILDER
 // ═══════════════════════════════════════════
-function buildElitePrompt(date, matchData, allOdds, leagues, totalFixtures) {
+function buildPrompt(date, matchData, allOdds, leagues, totalFixtures) {
   const fullDate = niceDate(date);
 
-  let matchContext = '';
+  let matchCtx = '';
   matchData.forEach((m, i) => {
-    const f = m.fixture;
+    const f  = m.fixture;
     const hs = m.homeStanding;
-    const as_ = m.awayStanding;
+    const as = m.awayStanding;
     const odds = oddsForMatch(allOdds, f.teams.home.name, f.teams.away.name);
-    matchContext += `
+
+    matchCtx += `
 --- MATCH ${i+1}: ${f.teams.home.name} vs ${f.teams.away.name} ---
-League: ${f.league.name} | Country: ${f.league.country}
-Kickoff: ${f.fixture.date}
-Venue: ${f.fixture.venue?.name || 'Unknown'}, ${f.fixture.venue?.city || ''}
-Home Standing: ${hs ? `Rank ${hs.rank}, ${hs.points}pts, ${hs.played} played, GF:${hs.gf} GA:${hs.ga}, Form: ${hs.form}` : 'No standing data'}
-Away Standing: ${as_ ? `Rank ${as_.rank}, ${as_.points}pts, ${as_.played} played, GF:${as_.gf} GA:${as_.ga}, Form: ${as_.form}` : 'No standing data'}
-Home Last 6 Form: ${m.homeForm || 'N/A'}
-Away Last 6 Form: ${m.awayForm || 'N/A'}
-Home Recent Results: ${m.homeRecent}
-Away Recent Results: ${m.awayRecent}
-H2H Last 5: ${m.h2hSummary}
-Confirmed Injuries/Suspensions: ${m.injuries}
-Live Bookmaker Odds: ${odds}
+League: ${f.league.name} (${f.league.country}) | KO: ${f.fixture.date}
+Venue: ${f.fixture.venue?.name||'Unknown'}, ${f.fixture.venue?.city||''}
+Home Standing: ${hs ? `Rank ${hs.rank}, ${hs.points}pts, ${hs.played} played, GF:${hs.gf} GA:${hs.ga}, Form:${hs.form}` : 'Use your knowledge'}
+Away Standing: ${as ? `Rank ${as.rank}, ${as.points}pts, ${as.played} played, GF:${as.gf} GA:${as.ga}, Form:${as.form}` : 'Use your knowledge'}
+Home Form (last 5): ${m.homeForm}
+Away Form (last 5): ${m.awayForm}
+Home Recent: ${m.homeRecent}
+Away Recent: ${m.awayRecent}
+H2H: ${m.h2hSummary}
+Injuries: ${m.injuries || 'None confirmed'}
+Bookmaker Odds: ${odds}
 `;
   });
 
-  return `You are ANALYST PRO — the world's most advanced football betting intelligence system. You think like a professional quant bettor with 15 years experience. You are ruthlessly logical, statistically driven, and never emotional.
+  return `You are ANALYST PRO — elite football betting intelligence system. You think like a professional quant bettor with 15+ years experience. Ruthlessly logical. Statistically driven. Never emotional.
 
-ANALYSIS DATE: ${fullDate}
-TOTAL FIXTURES TODAY: ${totalFixtures}
-ACTIVE FOCUS LEAGUES: ${leagues.join(', ')}
+DATE: ${fullDate}
+TOTAL FIXTURES: ${totalFixtures}
+LEAGUES FOCUS: ${leagues.join(', ')}
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-LIVE REAL-TIME DATA — FETCHED JUST NOW
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-${matchContext}
+══════════════════════════════════════
+LIVE DATA FETCHED RIGHT NOW:
+══════════════════════════════════════
+${matchCtx}
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-YOUR TASK
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+For any match above where live data says "Use your knowledge" or "See AI analysis" — use your own deep knowledge of that team's current season form, standings, injuries, and motivation. You know this data.
 
-Using ALL the live data provided above, perform a FULL ELITE ANALYSIS.
+══════════════════════════════════════
+YOUR TASK:
+══════════════════════════════════════
 
-STEP 1 — INTELLIGENT FILTERING:
-From the matches above, select ONLY those that meet ALL criteria:
-✅ Clear statistical or quality edge
-✅ Strong form divergence
-✅ Meaningful motivation (title race, relegation, European spots, cups)
-✅ Predictable pattern based on data
-❌ ELIMINATE any match where confidence is below 80%
-❌ ELIMINATE coin-flip fixtures with no clear edge
+STEP 1 — FILTER: From all matches above PLUS any other major matches today you know about, select the 20-25 MOST PREDICTABLE fixtures. Apply this logic:
+✅ Clear quality/form gap between teams
+✅ Strong motivation on one side (title race, relegation, European spots)
+✅ Consistent statistical patterns (high scoring league, defensive record etc)
+✅ Injury news that gives one team clear advantage
+❌ ELIMINATE: matches below 80% confidence
+❌ ELIMINATE: coin-flip, evenly matched, mid-table nothing-to-play-for games
 
-STEP 2 — DEEP ANALYSIS per selected match:
-For each match analyse using the LIVE DATA PROVIDED:
-• Form trend analysis (what the W/D/L sequence tells us)
-• Standing context (what the league position means for motivation)
-• H2H patterns (who dominates, typical scorelines, BTTS rate)
-• Goals trend (high scoring? defensive? Over/Under tendency)
-• Injury impact (how do the confirmed absences affect the team?)
-• Motivation level (what is at stake for each side?)
-• Live odds analysis (where is the value vs bookmaker pricing?)
-• Home/away advantage (is home record strong? away form poor?)
+STEP 2 — DEEP ANALYSIS per selected match using ALL available data:
+• Form trend (what W/D/L sequence signals)
+• Standings motivation (what the points position means)
+• H2H dominance patterns
+• Goals trend (over-friendly? tight? BTTS rate?)
+• Injury impact assessment
+• Home/away specific patterns
+• Odds value vs true probability
 
-STEP 3 — MARKET SELECTION:
-For each match select the SINGLE BEST MARKET from:
-• Match Result 1X2
-• Double Chance (1X / X2 / 12)
-• Draw No Bet (Home or Away)
-• Asian Handicap (-0.5, -1, -1.5)
-• Over/Under 1.5 / 2.5 / 3.5 Goals
-• BTTS Yes / No
-• First Half Over 0.5 / 1.5
-• Home Win & Over 2.5 combo
-• Away Win & Over 1.5 combo
-• Clean Sheet Yes/No
-Choose the market with the HIGHEST statistical probability of landing.
+STEP 3 — PICK THE SINGLE BEST MARKET per match from:
+1X2 | Double Chance | Draw No Bet | Asian Handicap | Over/Under 1.5, 2.5, 3.5 | BTTS Yes/No | 1st Half Over 0.5/1.5 | Home Win & Over 2.5 | Away Win & Over 1.5 | Clean Sheet
 
-STEP 4 — OUTPUT FORMAT (use this EXACTLY for each match):
+Pick the market with HIGHEST probability of landing — not just the most popular.
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+STEP 4 — OUTPUT EACH MATCH LIKE THIS:
+━━━━━━━━━━━━━━━━━━━━━━━━━
 MATCH [N]: [Home] vs [Away]
-[League] | [Time GMT]
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-📊 FORM: [Home last 5] | [Away last 5]
-🏆 STANDINGS: [Home rank & pts] | [Away rank & pts]
-⚽ GOALS TREND: [scoring/conceding pattern]
-🔴 KEY ABSENCES: [injuries from live data or "None confirmed"]
-🔥 MOTIVATION: [sharp 1-sentence context]
-📈 LIVE ODDS SIGNAL: [what the odds tell us]
-🎯 BEST MARKET: [Market name]
+[League] | [Time]
+━━━━━━━━━━━━━━━━━━━━━━━━━
+📊 FORM: [Home] | [Away]
+🏆 STANDINGS: [Home rank/pts] | [Away rank/pts]
+⚽ GOALS TREND: [pattern description]
+🔴 KEY ABSENCES: [confirmed or suspected]
+🔥 MOTIVATION: [one sharp sentence]
+📈 ODDS SIGNAL: [value comment]
+🎯 BEST MARKET: [market name]
 💯 CONFIDENCE: [XX]%
-🧠 ANALYST EDGE: [2-3 sharp sentences — why this hits]
+🧠 ANALYST EDGE: [2-3 sharp sentences — the exact statistical reason this hits]
 
 STEP 5 — BUILD 6 ACCUMULATORS:
-
-🟢 SAFE ACCA #1 — "THE VAULT" [4-5 legs, 85%+ each, DNB/Over/BTTS preferred]
+🟢 SAFE ACCA #1 — "THE VAULT" [4-5 legs, 85%+ conf, DNB/Over/BTTS only]
 🟢 SAFE ACCA #2 — "THE SHIELD" [4 legs, Draw No Bet only]
-🟢 SAFE ACCA #3 — "GOALS MACHINE" [4-5 legs, Over/BTTS only, no result dependency]
-🟡 MEDIUM ACCA #1 — "THE CLIMBER" [5 legs, win markets + overs, 78-85% conf each]
-🟡 MEDIUM ACCA #2 — "THE CONTINENTAL" [5 legs, cross-league value]
-🔴 HIGH ODDS BET — "THE SURGEON" [6 legs, logical but higher odds]
+🟢 SAFE ACCA #3 — "GOALS MACHINE" [4-5 legs, Over/BTTS only — no result needed]
+🟡 MEDIUM ACCA #1 — "THE CLIMBER" [5 legs, win + over combos]
+🟡 MEDIUM ACCA #2 — "THE CONTINENTAL" [5 cross-league picks]
+🔴 HIGH ODDS BET — "THE SURGEON" [6 legs, higher odds but still logical]
 
-For each accumulator show: all legs, combined probability %, estimated odds range.
+For each accumulator: list legs, combined probability %, estimated odds range.
 
 STEP 6 — ANALYST EDGE REPORT:
-End with:
-• 🥇 Strongest single bet of the day
-• ⚠️ Most dangerous match to avoid (and why)
-• 💰 Best value accumulator today
-• 🔑 Key pattern to exploit across today's fixtures
+🥇 Strongest single bet today
+⚠️ Most dangerous match to avoid
+💰 Best value accumulator
+🔑 Key pattern to exploit today
 
-CRITICAL RULES:
-✅ Use the LIVE DATA provided — reference actual standings, form, injuries
-✅ Think statistically — not emotionally
-✅ Smart markets over simple 1X2
-✅ No pick below 80% confidence
-✅ Be sharp, specific, and brutally honest
-✅ If data shows a big team is weakened by injuries — say so and adjust prediction
-✅ Reference the actual odds provided when discussing value`;
+RULES:
+✅ Reference actual live data provided above
+✅ Use your own knowledge where live data was unavailable
+✅ Never pick below 80% confidence
+✅ Smart markets over 1X2
+✅ No big-team bias — logic only
+✅ Be sharp, direct, professional`;
 }
 
 // ═══════════════════════════════════════════
 // OUTPUT FORMATTER
 // ═══════════════════════════════════════════
 function formatOutput(text) {
-  let html = text
-    // Section dividers
-    .replace(/━+/g, '<hr style="border:none;border-top:1px solid #1a2535;margin:20px 0 16px;">')
-    .replace(/═+/g, '<hr style="border:none;border-top:1px solid rgba(0,232,122,0.15);margin:24px 0;">')
-    // Match headers
-    .replace(/^(MATCH \d+:.+)$/gm, '<div style="font-family:Bebas Neue,sans-serif;font-size:1.35rem;letter-spacing:3px;color:#00e87a;margin:32px 0 4px;padding-top:8px;">$1</div>')
-    // Accumulator headers — safe
-    .replace(/(🟢 SAFE ACCA[^\n]+)/g, '<div style="font-family:Bebas Neue,sans-serif;font-size:1.05rem;letter-spacing:2px;color:#00e87a;margin:24px 0 8px;padding:10px 16px;background:rgba(0,232,122,0.07);border-left:3px solid #00e87a;border-radius:0 6px 6px 0;">$1</div>')
-    // Accumulator headers — medium
-    .replace(/(🟡 MEDIUM ACCA[^\n]+)/g, '<div style="font-family:Bebas Neue,sans-serif;font-size:1.05rem;letter-spacing:2px;color:#f5c518;margin:24px 0 8px;padding:10px 16px;background:rgba(245,197,24,0.07);border-left:3px solid #f5c518;border-radius:0 6px 6px 0;">$1</div>')
-    // High odds
-    .replace(/(🔴 HIGH ODDS[^\n]+)/g, '<div style="font-family:Bebas Neue,sans-serif;font-size:1.05rem;letter-spacing:2px;color:#ff3d57;margin:24px 0 8px;padding:10px 16px;background:rgba(255,61,87,0.07);border-left:3px solid #ff3d57;border-radius:0 6px 6px 0;">$1</div>')
-    // Confidence inline highlight
+  const html = text
+    .replace(/━+/g, '<hr style="border:none;border-top:1px solid #1a2535;margin:18px 0 14px;">')
+    .replace(/═+/g, '<hr style="border:none;border-top:1px solid rgba(0,232,122,0.12);margin:22px 0;">')
+    .replace(/^(MATCH \d+:.+)$/gm,
+      '<div style="font-family:Bebas Neue,sans-serif;font-size:1.3rem;letter-spacing:3px;color:#00e87a;margin:30px 0 2px;">$1</div>')
+    .replace(/(🟢 SAFE ACCA[^\n]+)/g,
+      '<div style="font-family:Bebas Neue,sans-serif;font-size:1rem;letter-spacing:2px;color:#00e87a;margin:22px 0 6px;padding:10px 14px;background:rgba(0,232,122,0.07);border-left:3px solid #00e87a;border-radius:0 6px 6px 0;">$1</div>')
+    .replace(/(🟡 MEDIUM ACCA[^\n]+)/g,
+      '<div style="font-family:Bebas Neue,sans-serif;font-size:1rem;letter-spacing:2px;color:#f5c518;margin:22px 0 6px;padding:10px 14px;background:rgba(245,197,24,0.07);border-left:3px solid #f5c518;border-radius:0 6px 6px 0;">$1</div>')
+    .replace(/(🔴 HIGH ODDS[^\n]+)/g,
+      '<div style="font-family:Bebas Neue,sans-serif;font-size:1rem;letter-spacing:2px;color:#ff3d57;margin:22px 0 6px;padding:10px 14px;background:rgba(255,61,87,0.07);border-left:3px solid #ff3d57;border-radius:0 6px 6px 0;">$1</div>')
     .replace(/💯 CONFIDENCE: (\d+)%/g, (_, n) => {
       const c = parseInt(n);
       const col = c>=88?'#00e87a':c>=82?'#f5c518':'#ff3d57';
-      return `💯 CONFIDENCE: <span style="font-family:Bebas Neue,sans-serif;font-size:1.25rem;letter-spacing:1px;color:${col};">${n}%</span>`;
+      return `💯 CONFIDENCE: <span style="font-family:Bebas Neue,sans-serif;font-size:1.2rem;color:${col};">${n}%</span>`;
     })
-    // Best market highlight
-    .replace(/🎯 BEST MARKET: (.+)$/gm, '🎯 BEST MARKET: <span style="font-family:JetBrains Mono,monospace;color:#00e87a;font-weight:700;background:rgba(0,232,122,0.1);padding:2px 8px;border-radius:3px;">$1</span>')
-    // Analyst edge report icons
-    .replace(/🥇(.+)$/gm, '<div style="padding:6px 0;"><span style="color:#f5c518;">🥇</span>$1</div>')
-    .replace(/⚠️(.+)$/gm, '<div style="padding:6px 0;"><span style="color:#ff3d57;">⚠️</span>$1</div>')
-    .replace(/💰(.+)$/gm, '<div style="padding:6px 0;"><span style="color:#00e87a;">💰</span>$1</div>')
-    .replace(/🔑(.+)$/gm, '<div style="padding:6px 0;"><span style="color:#2196f3;">🔑</span>$1</div>')
-    // Bold & italic
+    .replace(/🎯 BEST MARKET: (.+)$/gm,
+      '🎯 BEST MARKET: <span style="font-family:JetBrains Mono,monospace;color:#00e87a;font-weight:700;background:rgba(0,232,122,0.1);padding:2px 8px;border-radius:3px;">$1</span>')
     .replace(/\*\*(.+?)\*\*/g, '<strong style="color:#f5c518;">$1</strong>')
     .replace(/\*(.+?)\*/g, '<span style="color:#64b5f6;">$1</span>')
-    // Line breaks
-    .replace(/\n\n/g, '</p><p style="margin:10px 0;">')
+    .replace(/\n\n/g, '</p><p style="margin:9px 0;">')
     .replace(/\n/g, '<br>');
 
-  return `<div style="line-height:1.85;">${html}</div>`;
+  return `<div style="line-height:1.9;">${html}</div>`;
 }
 </script>
 </body>
